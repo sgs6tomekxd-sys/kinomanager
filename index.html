@@ -249,7 +249,15 @@
                     App.render();
                 } catch (e) {
                     console.error("Init Error", e);
-                    Toast.show("Błąd inicjalizacji danych (Sprawdź konfigurację Supabase)", "error");
+                    Toast.show("Błąd połączenia z bazą. Uruchamiam w trybie awaryjnym.", "error");
+                    
+                    // Fallback to local default data
+                    try {
+                        const scriptData = JSON.parse(document.getElementById('db-data').textContent);
+                        if (!State.data) State.data = scriptData;
+                    } catch (err) { console.error(err); }
+
+                    App.render();
                 }
             },
 
