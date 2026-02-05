@@ -19,7 +19,7 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KinoManager Pro</title>
+    <title>KinoManager Pro v2.0 (Online)</title>
     
     <!-- External Libs -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -269,7 +269,7 @@ end $$;
                 try {
                     if (supabase) {
                         // --- SUPABASE MODE ---
-                        console.log("Connecting to Supabase...");
+                        // console.log("Connecting to Supabase...");
                         
                         // Check Connection & Tables
                         const { error } = await supabase.from('users').select('count', { count: 'exact', head: true });
@@ -282,6 +282,7 @@ end $$;
                                     <div class="bg-white p-8 rounded-xl max-w-2xl w-full shadow-2xl">
                                         <h1 class="text-2xl font-bold text-red-600 mb-4">Wymagana Konfiguracja Bazy Danych</h1>
                                         <p class="text-slate-600 mb-4">Połączenie z Supabase jest aktywne, ale brakuje wymaganych tabel.</p>
+                                        <p class="text-red-500 font-mono text-sm mb-4">Błąd: ${error.message || JSON.stringify(error)}</p>
                                         <ol class="list-decimal list-inside space-y-2 mb-6 text-slate-700">
                                             <li>Zaloguj się do <b>Supabase</b>.</li>
                                             <li>Wejdź w <b>SQL Editor</b> (ikona terminala po lewej).</li>
@@ -300,21 +301,26 @@ end $$;
 
                         const fetchTable = async (table, select) => {
                             const { data, error } = await supabase.from(table).select(select);
-                            if (error) throw error;
+                            if (error) throw new Error(`Błąd pobierania tabeli ${table}: ${error.message}`);
                             return data;
                         };
 
-                        // Map columns to match app state (camelCase)
-                        const [users, movies, logs] = await Promise.all([
-                            fetchTable('users', 'username, password, role'),
-                            fetchTable('movies', 'id, title, distributor, archived, playStart:play_start, playEnd:play_end, shippingDestination:shipping_destination, shippingDeadline:shipping_deadline, isSent:is_sent, diskReceived:disk_received, keyAvailable:key_available, keyNotRequired:key_not_required, keyValidUntil:key_valid_until, addedAt:added_at'),
-                            fetchTable('logs', 'id, user:user_name, action, timestamp')
-                        ]);
+                        try {
+                            // Map columns to match app state (camelCase)
+                            const [users, movies, logs] = await Promise.all([
+                                fetchTable('users', 'username, password, role'),
+                                fetchTable('movies', 'id, title, distributor, archived, playStart:play_start, playEnd:play_end, shippingDestination:shipping_destination, shippingDeadline:shipping_deadline, isSent:is_sent, diskReceived:disk_received, keyAvailable:key_available, keyNotRequired:key_not_required, keyValidUntil:key_valid_until, addedAt:added_at'),
+                                fetchTable('logs', 'id, user:user_name, action, timestamp')
+                            ]);
 
-                        State.data = { users, movies, logs };
-                        console.log("Loaded data from Supabase");
-                        
-                        State.subscribeToChanges();
+                            State.data = { users, movies, logs };
+                            console.log("Loaded data from Supabase");
+                            State.subscribeToChanges();
+                            
+                        } catch (fetchErr) {
+                            alert("Błąd synchronizacji danych: " + fetchErr.message);
+                            throw fetchErr; // Re-throw to trigger fallback
+                        }
                     } else {
                         // --- LEGACY LOCAL MODE ---
                         // 1. Try API first (Best source of truth)
