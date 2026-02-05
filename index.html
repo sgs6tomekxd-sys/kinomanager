@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KinoManager Pro</title>
+    
+    <!-- External Libs -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                    },
+                    colors: {
+                        slate: { 850: '#151e2e', 900: '#0f172a' },
+                        brand: {
+                            50: '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd', 300: '#7dd3fc',
+                            400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1',
+                            800: '#075985', 900: '#0c4a6e', 950: '#082f49',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen overflow-hidden flex selection:bg-brand-200 selection:text-brand-900">
+
+    <!-- DATABASE STORAGE (Hidden) -->
+    <script id="db-data" type="application/json">
+        {"users":[{"username":"admin","password":"admin","role":"admin"}],"movies":[],"logs":[]}
+    </script>
+
+    <!-- APP CONTAINER -->
+    <div id="app" class="w-full h-full flex">
+        <!-- Content injected by JS -->
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none"></div>
+
+    <!-- LOGIC -->
+    <script>
+        // --- SUPABASE CONFIG ---
+        // Wpisz tutaj swoje dane z Supabase (Project Settings -> API)
+        const SUPABASE_URL = 'https://udnjnaeummbkxiehebwm.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbmpuYWV1bW1ia3hpZWhlYndtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyOTMwODcsImV4cCI6MjA4NTg2OTA4N30.nfeDUx0og_siNY0kEKSxacPTsmlcovmkV9symw4_P5s';
+        
+        let supabase = null;
+        try {
+            if (SUPABASE_URL !== 'TWOJ_SUPABASE_URL') {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            }
+        } catch (e) { console.error("Supabase init error", e); }
+
+        // --- SERVICES & UTILS ---
+        
+        const Utils = {
+            generateId: () => Math.random().toString(36).substr(2, 9),
+            getDateStr: () => new Date().toISOString().split('T')[0],
+            getDateTimeStr: () => new Date().toLocaleString('pl-PL'),
+            daysDiff: (dateStr) => {
+                if (!dateStr) return 999;
+                const target = new Date(dateStr);
+                const today = new Date();
+                today.setHours(0,0,0,0); target.setHours(0,0,0,0);
+                return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+            },
+            calculateWinner: (squares) => {
+                const lines = [
+                    [0, 1, 2], [3, 4, 5], [6, 7, 8],
+                    [0, 3, 6], [1, 4, 7], [2, 5, 8],
+                    [0, 4, 8], [2, 4, 6]
+                ];
+                for (let i = 0; i < lines.length; i++) {
+                    const [a, b, c] = lines[i];
+                    if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
+                        return squares[a];
+                    }
+                }
+                return null;
+            }
+        };
+
+        const Toast = {
+            show: (msg, type = 'info') => {
+                const container = document.getElementById('toast-container');
+                const el = document.createElement('div');
+                const colors = {
+                    success: 'bg-emerald-600 text-white border-emerald-700',
+                    error: 'bg-rose-600 text-white border-rose-700',
+                    info: 'bg-slate-800 text-white border-slate-900',
+                    warning: 'bg-amber-500 text-white border-amber-600'
+                };
+                const icons = {
+                    success: 'fa-check-circle',
+                    error: 'fa-exclamation-circle',
+                    info: 'fa-info-circle',
+                    warning: 'fa-exclamation-triangle'
+                };
+
+                el.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl border-l-4 transform transition-all duration-300 translate-x-full opacity-0 ${colors[type] || colors.info}`;
+                el.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i> <span class="font-medium text-sm">${msg}</span>`;
+                
+                container.appendChild(el);
+                
+                // Animate in
+                requestAnimationFrame(() => {
+                    el.classList.remove('translate-x-full', 'opacity-0');
+                });
+
+                // Remove after 3s
+                setTimeout(() => {
+                    el.classList.add('translate-x-full', 'opacity-0');
+                    setTimeout(() => el.remove(), 300);
+                }, 3500);
+            }
+        };
+
+        // --- STATE MANAGEMENT ---
+
+        let fileHandle = null;
+        let saveTimeout = null;
+
+        const State = {
+            data: {
+                users: [],
+                movies: [],
+                logs: []
+            },
+            session: {
+                user: null,
+                view: 'dashboard', // dashboard, movies, archive, users, logs
+                searchTerm: '',
+                filterStatus: 'all', // all, urgent, active
+                isSidebarOpen: true,
+                alarmHidden: false,
+                darkMode: localStorage.getItem('kino_darkMode') === 'true',
+                ticTacToe: {
+                    board: Array(9).fill(null),
+                    xIsNext: true,
+                    winner: null
+                }
+            },
+
+            init: async () => {
+                if (State.session.darkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+
+                try {
+                    if (supabase) {
+                        // --- SUPABASE MODE ---
+                        console.log("Connecting to Supabase...");
+                        
+                        const fetchTable = async (table, select) => {
+                            const { data, error } = await supabase.from(table).select(select);
+                            if (error) throw error;
+                            return data;
+                        };
+
+                        // Map columns to match app state (camelCase)
+                        const [users, movies, logs] = await Promise.all([
+                            fetchTable('users', 'username, password, role'),
+                            fetchTable('movies', 'id, title, distributor, archived, playStart:play_start, playEnd:play_end, shippingDestination:shipping_destination, shippingDeadline:shipping_deadline, isSent:is_sent, diskReceived:disk_received, keyAvailable:key_available, keyNotRequired:key_not_required, keyValidUntil:key_valid_until, addedAt:added_at'),
+                            fetchTable('logs', 'id, user:user_name, action, timestamp')
+                        ]);
+
+                        State.data = { users, movies, logs };
+                        console.log("Loaded data from Supabase");
+                        
+                        State.subscribeToChanges();
+                    } else {
+                        // --- LEGACY LOCAL MODE ---
+                        // 1. Try API first (Best source of truth)
+                        let apiData = null;
+                        try {
+                            const res = await fetch('/api/data');
+                            if (res.ok) {
+                                apiData = await res.json();
+                                console.log("Loaded data from API");
+                            }
+                        } catch (e) {
+                            console.log("API not available, falling back...");
+                        }
+
+                        // 2. Try LocalStorage (Second best)
+                        let localData = null;
+                        try {
+                            const raw = localStorage.getItem('kino_data');
+                            if (raw) localData = JSON.parse(raw);
+                        } catch (e) {}
+
+                        // 3. Decide source
+                        if (apiData) {
+                            State.data = apiData;
+                        } else if (localData) {
+                            State.data = localData;
+                            console.log("Loaded data from LocalStorage");
+                        } else {
+                             // 4. Default from HTML script
+                             const scriptData = JSON.parse(document.getElementById('db-data').textContent);
+                             State.data = scriptData;
+                             console.log("Loaded data from HTML Script");
+                        }
+                        
+                        // Start Polling for Sync (Legacy only)
+                        setInterval(State.syncData, 5000);
+                    }
+
+                    // Session restore (Use localStorage for persistence across tabs/restarts)
+                    const savedSession = localStorage.getItem('kino_session');
+                    if (savedSession) {
+                        State.session.user = JSON.parse(savedSession);
+                    }
+                    
+                    App.render();
+                } catch (e) {
+                    console.error("Init Error", e);
+                    Toast.show("Błąd inicjalizacji danych (Sprawdź konfigurację Supabase)", "error");
+                }
+            },
+
+            subscribeToChanges: () => {
+                if (!supabase) return;
+                const channel = supabase.channel('public:data')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'movies' }, payload => {
+                        State.handleRealtimeUpdate('movies', payload);
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'logs' }, payload => {
+                        State.handleRealtimeUpdate('logs', payload);
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, payload => {
+                        State.handleRealtimeUpdate('users', payload);
+                    })
+                    .subscribe();
+            },
+
+            handleRealtimeUpdate: (table, payload) => {
+                // console.log('Realtime update:', table, payload);
+                const { eventType, new: newRec, old: oldRec } = payload;
+                
+                const mapMovie = (m) => ({
+                    id: m.id,
+                    title: m.title,
+                    distributor: m.distributor,
+                    archived: m.archived,
+                    playStart: m.play_start,
+                    playEnd: m.play_end,
+                    shippingDestination: m.shipping_destination,
+                    shippingDeadline: m.shipping_deadline,
+                    isSent: m.is_sent,
+                    diskReceived: m.disk_received,
+                    keyAvailable: m.key_available,
+                    keyNotRequired: m.key_not_required,
+                    keyValidUntil: m.key_valid_until,
+                    addedAt: m.added_at
+                });
+
+                const mapLog = (l) => ({
+                     id: l.id,
+                     user: l.user_name,
+                     action: l.action,
+                     timestamp: l.timestamp
+                });
+
+                if (table === 'movies') {
+                    if (eventType === 'INSERT') {
+                        // Check if not already exists (prevent double add from local optimistic update)
+                        if (!State.data.movies.find(m => m.id === newRec.id)) {
+                            State.data.movies.push(mapMovie(newRec));
+                        }
+                    } else if (eventType === 'UPDATE') {
+                        const idx = State.data.movies.findIndex(m => m.id === newRec.id);
+                        if (idx !== -1) State.data.movies[idx] = mapMovie(newRec);
+                    } else if (eventType === 'DELETE') {
+                        State.data.movies = State.data.movies.filter(m => m.id !== oldRec.id);
+                    }
+                } else if (table === 'logs') {
+                     if (eventType === 'INSERT') {
+                        if (!State.data.logs.find(l => l.id === newRec.id)) {
+                            State.data.logs.unshift(mapLog(newRec));
+                            if (State.data.logs.length > 200) State.data.logs.pop();
+                        }
+                    }
+                } else if (table === 'users') {
+                     if (eventType === 'INSERT') {
+                         if (!State.data.users.find(u => u.username === newRec.username)) {
+                             State.data.users.push(newRec);
+                         }
+                     } else if (eventType === 'DELETE') {
+                         State.data.users = State.data.users.filter(u => u.username !== oldRec.username);
+                     }
+                }
+                
+                App.render();
+            },
+
+            syncData: async () => {
+                // Supabase handles this via Realtime, so we skip if connected
+                if (supabase) return;
+
+                // Don't sync if user is typing (active element is input/textarea)
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                    return; 
+                }
+
+                try {
+                    const res = await fetch('/api/data');
+                    if (res.ok) {
+                        const serverData = await res.json();
+                        // Simple check if data changed (to avoid unnecessary re-renders)
+                        if (JSON.stringify(serverData) !== JSON.stringify(State.data)) {
+                            console.log("Syncing data from server...");
+                            State.data = serverData;
+                            // Update local storage backup
+                            localStorage.setItem('kino_data', JSON.stringify(State.data));
+                            App.render();
+                        }
+                    }
+                } catch (e) {
+                    // Silent fail on polling error
+                }
+            },
+
+            login: (username, password) => {
+                const user = State.data.users.find(u => u.username === username && u.password === password);
+                if (user) {
+                    State.session.user = user;
+                    localStorage.setItem('kino_session', JSON.stringify(user));
+                    State.logAction("Zalogowano do systemu");
+                    App.render();
+                } else {
+                    Toast.show("Nieprawidłowe dane logowania", "error");
+                }
+            },
+
+            logout: () => {
+                State.logAction("Wylogowano");
+                State.session.user = null;
+                localStorage.removeItem('kino_session');
+                App.render();
+            },
+
+            logAction: async (action) => {
+                if (!State.session.user) return;
+                const log = {
+                    id: Utils.generateId(),
+                    timestamp: Utils.getDateTimeStr(),
+                    user: State.session.user.username,
+                    action: action
+                };
+
+                if (supabase) {
+                    // Fire and forget log to Supabase
+                    supabase.from('logs').insert({
+                        id: log.id,
+                        user_name: log.user,
+                        action: log.action,
+                        timestamp: log.timestamp
+                    }).then(() => {});
+                } else {
+                    State.data.logs.unshift(log); // Add to beginning
+                    if (State.data.logs.length > 200) State.data.logs.pop(); // Keep last 200
+                }
+            },
+
+            toggleDarkMode: () => {
+                State.session.darkMode = !State.session.darkMode;
+                localStorage.setItem('kino_darkMode', State.session.darkMode);
+                if (State.session.darkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                App.render();
+            },
+
+            resetTicTacToe: () => {
+                State.session.ticTacToe = {
+                    board: Array(9).fill(null),
+                    xIsNext: true,
+                    winner: null
+                };
+                App.render();
+            },
+
+            playTicTacToe: (index) => {
+                const game = State.session.ticTacToe;
+                if (game.board[index] || game.winner) return;
+
+                // Player Move
+                game.board[index] = 'X';
+                game.xIsNext = false;
+                game.winner = Utils.calculateWinner(game.board);
+
+                if (!game.winner && game.board.includes(null)) {
+                    // Bot Move (Simple Random)
+                    setTimeout(() => {
+                        const available = game.board.map((v, i) => v === null ? i : null).filter(v => v !== null);
+                        if (available.length > 0) {
+                            const botMove = available[Math.floor(Math.random() * available.length)];
+                            game.board[botMove] = 'O';
+                            game.xIsNext = true;
+                            game.winner = Utils.calculateWinner(game.board);
+                            App.render();
+                        }
+                    }, 500);
+                }
+                App.render();
+            },
+
+            // --- DATA OPERATIONS ---
+
+            save: async (force = false) => {
+                // Legacy Save Logic (File/LocalStorage/API)
+                
+                // Update internal script (for HTML download compatibility)
+                const dataScript = document.getElementById('db-data');
+                dataScript.textContent = JSON.stringify(State.data);
+
+                // Save to LocalStorage (Always backup)
+                localStorage.setItem('kino_data', JSON.stringify(State.data));
+
+                // If Supabase is active, we rely on it for persistence.
+                // We only proceed with File/API save if NOT using Supabase, OR if FileHandle is explicitly connected for backup.
+                if (supabase && !fileHandle) return;
+
+                // Save to API (Primary persistence for Legacy)
+                const saveToApi = async () => {
+                    if (supabase) return; // Don't save to legacy API if Supabase is on
+                    try {
+                        await fetch('/api/data', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(State.data)
+                        });
+                        console.log("Saved to API");
+                    } catch (e) {
+                        console.log("API save failed (offline?)");
+                    }
+                };
+
+                // Debounce
+                if (saveTimeout) clearTimeout(saveTimeout);
+                
+                const doSave = async () => {
+                    await saveToApi();
+
+                    // Optional File Handle Save
+                    if (fileHandle) {
+                        try {
+                            const writable = await fileHandle.createWritable();
+                            const htmlContent = document.documentElement.outerHTML;
+                            await writable.write(htmlContent);
+                            await writable.close();
+                            Toast.show("Zapisano do pliku", "success");
+                        } catch (err) {
+                            console.error("File save failed", err);
+                        }
+                    }
+                };
+
+                if (force) {
+                    await doSave();
+                } else {
+                    saveTimeout = setTimeout(doSave, 1000); // 1s debounce
+                }
+            },
+
+            enableFileAccess: async () => {
+                try {
+                    if (window.showSaveFilePicker) {
+                        fileHandle = await window.showSaveFilePicker({
+                            suggestedName: 'KinoManager_Pro.html',
+                            types: [{ description: 'HTML File', accept: { 'text/html': ['.html'] } }],
+                        });
+                        State.save(true);
+                        Toast.show("Połączono z plikiem! Auto-zapis aktywny.", "success");
+                        App.render(); // Re-render to update save icon
+                    } else {
+                        alert("Twoja przeglądarka nie obsługuje File System Access API.");
+                    }
+                } catch (err) {
+                    console.log("User cancelled or error", err);
+                }
+            },
+
+            addMovie: async (movieData) => {
+                const movie = {
+                    id: Utils.generateId(),
+                    addedAt: Utils.getDateStr(),
+                    ...movieData,
+                    archived: false
+                };
+
+                if (supabase) {
+                    const dbMovie = {
+                        id: movie.id,
+                        title: movie.title,
+                        distributor: movie.distributor,
+                        play_start: movie.playStart,
+                        play_end: movie.playEnd,
+                        shipping_destination: movie.shippingDestination,
+                        shipping_deadline: movie.shippingDeadline,
+                        is_sent: movie.isSent || false,
+                        disk_received: movie.diskReceived || false,
+                        key_available: movie.keyAvailable || false,
+                        key_not_required: movie.keyNotRequired || false,
+                        key_valid_until: movie.keyValidUntil,
+                        archived: movie.archived,
+                        added_at: movie.addedAt
+                    };
+                    
+                    const { error } = await supabase.from('movies').insert(dbMovie);
+                    if (error) {
+                        console.error(error);
+                        Toast.show("Błąd zapisu do Supabase", "error");
+                        return;
+                    }
+                    State.logAction(`Dodano film: ${movie.title}`);
+                } else {
+                    State.data.movies.push(movie);
+                    State.logAction(`Dodano film: ${movie.title}`);
+                    State.save();
+                }
+                App.render();
+                Toast.show("Dodano film", "success");
+            },
+
+            updateMovie: async (id, field, value, opts = {}) => {
+                // Optimistic update locally for UI responsiveness
+                const movie = State.data.movies.find(m => m.id === id);
+                if (movie) {
+                    movie[field] = value;
+                    
+                    if (supabase) {
+                        // Map field to snake_case
+                        const fieldMap = {
+                            playStart: 'play_start',
+                            playEnd: 'play_end',
+                            shippingDestination: 'shipping_destination',
+                            shippingDeadline: 'shipping_deadline',
+                            isSent: 'is_sent',
+                            diskReceived: 'disk_received',
+                            keyAvailable: 'key_available',
+                            keyNotRequired: 'key_not_required',
+                            keyValidUntil: 'key_valid_until',
+                            addedAt: 'added_at'
+                        };
+                        const dbField = fieldMap[field] || field;
+                        await supabase.from('movies').update({ [dbField]: value }).eq('id', id);
+                    } else {
+                        State.save(opts.force === true);
+                    }
+
+                    if (opts.rerender) {
+                        App.filterTable(opts.archiveMode === true);
+                    }
+                }
+            },
+
+            toggleArchive: async (id) => {
+                const movie = State.data.movies.find(m => m.id === id);
+                if (movie) {
+                    movie.archived = !movie.archived;
+                    const action = movie.archived ? 'Zarchiwizowano' : 'Przywrócono';
+                    
+                    if (supabase) {
+                        await supabase.from('movies').update({ archived: movie.archived }).eq('id', id);
+                        State.logAction(`${action} film: ${movie.title}`);
+                    } else {
+                        State.logAction(`${action} film: ${movie.title}`);
+                        State.save();
+                    }
+                    
+                    App.render();
+                    Toast.show(movie.archived ? "Przeniesiono do archiwum" : "Przywrócono", "info");
+                }
+            },
+
+            deleteMovie: async (id) => {
+                const idx = State.data.movies.findIndex(m => m.id === id);
+                if (idx !== -1) {
+                    const title = State.data.movies[idx].title;
+                    
+                    if (supabase) {
+                        await supabase.from('movies').delete().eq('id', id);
+                        State.logAction(`Usunięto trwale film: ${title}`);
+                        // Local removal handled by Realtime or optimistic
+                        State.data.movies.splice(idx, 1); 
+                    } else {
+                        State.data.movies.splice(idx, 1);
+                        State.logAction(`Usunięto trwale film: ${title}`);
+                        State.save();
+                    }
+                    App.render();
+                    Toast.show("Usunięto film", "warning");
+                }
+            },
+
+            addUser: async (username, password, role) => {
+                if (State.data.users.find(u => u.username === username)) {
+                    return Toast.show("Użytkownik już istnieje!", "error");
+                }
+                
+                if (supabase) {
+                    const { error } = await supabase.from('users').insert({ username, password, role });
+                    if (error) {
+                         console.error(error);
+                         Toast.show("Błąd dodawania (może duplikat?)", "error");
+                         return;
+                    }
+                    State.logAction(`Dodano użytkownika: ${username}`);
+                } else {
+                    State.data.users.push({ username, password, role });
+                    State.logAction(`Dodano użytkownika: ${username}`);
+                    State.save();
+                }
+                App.render();
+                Toast.show("Dodano użytkownika", "success");
+            },
+
+            deleteUser: async (username) => {
+                if (username === 'admin') return Toast.show("Nie można usunąć administratora!", "error");
+                
+                if (supabase) {
+                    await supabase.from('users').delete().eq('username', username);
+                    State.logAction(`Usunięto użytkownika: ${username}`);
+                    State.data.users = State.data.users.filter(u => u.username !== username);
+                } else {
+                    State.data.users = State.data.users.filter(u => u.username !== username);
+                    State.logAction(`Usunięto użytkownika: ${username}`);
+                    State.save();
+                }
+                App.render();
+                Toast.show("Usunięto użytkownika", "warning");
+            }
+        };
+
+        // --- COMPONENTS ---
+
+        const Components = {
+            Login: () => `
+                <div class="w-full h-full flex items-center justify-center bg-slate-900 bg-opacity-50 backdrop-blur-sm">
+                    <div class="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md animate-bounce-in">
+                        <div class="text-center mb-8">
+                            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-100 text-brand-600 mb-4">
+                                <i class="fas fa-film text-3xl"></i>
+                            </div>
+                            <h1 class="text-3xl font-bold text-slate-800">KinoManager Pro</h1>
+                            <p class="text-slate-500 mt-2">Zaloguj się do systemu</p>
+                        </div>
+                        <form onsubmit="event.preventDefault(); State.login(this.u.value, this.p.value)" class="space-y-5">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Użytkownik</label>
+                                <input name="u" type="text" class="w-full rounded-lg border-slate-300 focus:ring-brand-500 focus:border-brand-500 p-3 bg-slate-50" placeholder="Login" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Hasło</label>
+                                <input name="p" type="password" class="w-full rounded-lg border-slate-300 focus:ring-brand-500 focus:border-brand-500 p-3 bg-slate-50" placeholder="Hasło" required>
+                            </div>
+                            <button class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 rounded-lg shadow-lg transition transform active:scale-95">
+                                Zaloguj się
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `,
+
+            Sidebar: () => {
+                const user = State.session.user;
+                const view = State.session.view;
+                const isOpen = State.session.isSidebarOpen;
+                const menuItems = [
+                    { id: 'dashboard', icon: 'fa-chart-pie', label: 'Dashboard' },
+                    { id: 'movies', icon: 'fa-list', label: 'Repertuar' },
+                    { id: 'archive', icon: 'fa-box-archive', label: 'Archiwum' },
+                    { id: 'logs', icon: 'fa-history', label: 'Logi Aktywności' },
+                ];
+                if (user.role === 'admin') {
+                    menuItems.push({ id: 'users', icon: 'fa-users-cog', label: 'Użytkownicy' });
+                }
+                
+                // Add Fun Tab at the bottom
+                const funItem = { id: 'fun', icon: 'fa-gamepad', label: 'Fun Zone' };
+
+                return `
+                    <div class="${isOpen ? 'w-64' : 'w-20'} bg-slate-900 dark:bg-slate-950 text-slate-300 flex flex-col flex-shrink-0 transition-all duration-300 border-r border-slate-800">
+                        <div class="h-16 flex items-center ${isOpen ? 'px-6' : 'justify-center'} bg-slate-950 border-b border-slate-800 transition-all">
+                            <i class="fas fa-film text-brand-500 text-xl ${isOpen ? 'mr-3' : ''}"></i>
+                            ${isOpen ? '<span class="font-bold text-white text-lg tracking-wide fade-in">KinoManager</span>' : ''}
+                        </div>
+                        
+                        <div class="flex-1 py-6 space-y-1 overflow-y-auto overflow-x-hidden">
+                            ${menuItems.map(item => `
+                                <button onclick="State.session.view = '${item.id}'; App.render()" 
+                                    class="w-full flex items-center ${isOpen ? 'px-6' : 'justify-center'} py-3 hover:bg-slate-800 hover:text-white transition-colors ${view === item.id ? 'bg-brand-600 text-white ' + (isOpen ? 'border-r-4 border-brand-300' : '') : ''}"
+                                    title="${item.label}">
+                                    <i class="fas ${item.icon} w-6 text-center ${isOpen ? 'mr-3' : 'text-xl'}"></i>
+                                    ${isOpen ? `<span class="font-medium fade-in">${item.label}</span>` : ''}
+                                </button>
+                            `).join('')}
+                            
+                            <!-- Divider -->
+                            <div class="my-4 border-t border-slate-800 mx-4"></div>
+
+                            <!-- Fun Tab -->
+                             <button onclick="State.session.view = '${funItem.id}'; App.render()" 
+                                class="w-full flex items-center ${isOpen ? 'px-6' : 'justify-center'} py-3 hover:bg-purple-900/50 hover:text-purple-300 text-purple-400 transition-colors ${view === funItem.id ? 'bg-purple-900 text-white' : ''}"
+                                title="${funItem.label}">
+                                <i class="fas ${funItem.icon} w-6 text-center ${isOpen ? 'mr-3' : 'text-xl'}"></i>
+                                ${isOpen ? `<span class="font-bold fade-in">${funItem.label}</span>` : ''}
+                            </button>
+                        </div>
+
+                        <div class="p-4 border-t border-slate-800 bg-slate-950/50">
+                             <!-- Dark Mode Toggle -->
+                            <button onclick="State.toggleDarkMode()" class="w-full flex items-center ${isOpen ? 'justify-start px-2' : 'justify-center'} gap-3 mb-4 text-slate-400 hover:text-white transition">
+                                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center">
+                                    <i class="fas ${State.session.darkMode ? 'fa-sun text-amber-400' : 'fa-moon text-slate-400'}"></i>
+                                </div>
+                                ${isOpen ? `<span class="text-sm font-medium fade-in">${State.session.darkMode ? 'Tryb Jasny' : 'Tryb Ciemny'}</span>` : ''}
+                            </button>
+
+                             <!-- Sidebar Toggle -->
+                            <button onclick="State.session.isSidebarOpen = !State.session.isSidebarOpen; App.render()" 
+                                class="w-full flex items-center ${isOpen ? 'justify-start px-2' : 'justify-center'} gap-3 mb-4 text-slate-500 hover:text-brand-400 transition">
+                                <i class="fas ${isOpen ? 'fa-angle-double-left' : 'fa-angle-double-right'} text-lg"></i>
+                                ${isOpen ? '<span class="text-xs font-bold uppercase tracking-wider fade-in">Zwiń pasek</span>' : ''}
+                            </button>
+
+                            <div class="flex items-center gap-3 mb-4 ${isOpen ? 'px-2' : 'justify-center'}">
+                                <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold flex-shrink-0">
+                                    ${user.username[0].toUpperCase()}
+                                </div>
+                                ${isOpen ? `
+                                <div class="fade-in overflow-hidden">
+                                    <div class="text-sm font-bold text-white truncate">${user.username}</div>
+                                    <div class="text-xs text-slate-500 uppercase">${user.role}</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                            <button onclick="State.logout()" class="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-red-600 hover:text-slate-200 text-slate-400 py-2 rounded transition" title="Wyloguj">
+                                <i class="fas fa-sign-out-alt"></i> ${isOpen ? 'Wyloguj' : ''}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            },
+
+            SystemStatus: () => {
+                if (State.session.alarmHidden) return '';
+
+                const movies = State.data.movies.filter(m => !m.archived);
+                const urgentDisk = movies.filter(m => !m.diskReceived && Utils.daysDiff(m.playStart) <= 3);
+                const urgentKey = movies.filter(m => !m.keyNotRequired && !m.keyAvailable && Utils.daysDiff(m.playStart) <= 2);
+                const urgentShipping = movies.filter(m => !m.isSent && m.shippingDeadline && Utils.daysDiff(m.shippingDeadline) <= 2);
+
+                const alerts = [];
+                if (urgentDisk.length > 0) alerts.push(`${urgentDisk.length} braków dysku`);
+                if (urgentKey.length > 0) alerts.push(`${urgentKey.length} braków kluczy KDM`);
+                if (urgentShipping.length > 0) alerts.push(`${urgentShipping.length} pilnych wysyłek`);
+
+                if (alerts.length === 0) {
+                    return `
+                        <div class="bg-emerald-600 text-white px-6 py-2 shadow-md flex items-center justify-between">
+                            <div class="flex items-center gap-3 text-sm">
+                                <i class="fas fa-check-circle"></i>
+                                <span class="font-bold">System OK</span>
+                            </div>
+                            <button onclick="State.session.alarmHidden=true; App.render()" class="text-white hover:text-emerald-200"><i class="fas fa-times"></i></button>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="bg-rose-600 text-white px-6 py-3 shadow-md flex items-center justify-between animate-pulse">
+                        <div class="flex items-center gap-3">
+                            <i class="fas fa-exclamation-triangle text-xl"></i>
+                            <span class="font-bold text-lg">UWAGA: ${alerts.join(', ')}!</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                             <button onclick="State.session.view='movies'; State.session.filterStatus='urgent'; App.render()" class="bg-white text-rose-600 px-3 py-1 rounded text-xs font-bold hover:bg-rose-50">
+                                Sprawdź
+                            </button>
+                            <button onclick="State.session.alarmHidden=true; App.render()" class="text-white hover:text-rose-200 text-lg"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
+                `;
+            },
+
+            TicTacToe: () => {
+                const game = State.session.ticTacToe;
+                const status = game.winner 
+                    ? `Wygrał: ${game.winner === 'X' ? 'Ty (X)' : 'Bot (O)'}!` 
+                    : (game.board.includes(null) ? (game.xIsNext ? 'Twój ruch (X)' : 'Ruch bota...') : 'Remis!');
+
+                return `
+                    <div class="flex flex-col items-center justify-center h-full animate-bounce-in">
+                        <div class="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl max-w-md w-full border border-slate-200 dark:border-slate-700">
+                            <h2 class="text-3xl font-black text-center mb-2 text-slate-800 dark:text-white">Kółko i Krzyżyk</h2>
+                            <p class="text-center text-slate-500 dark:text-slate-400 mb-8 font-medium">Zrelaksuj się w przerwie od pracy</p>
+                            
+                            <div class="flex justify-between items-center mb-6 px-4">
+                                <div class="text-xl font-bold ${game.winner ? 'text-brand-600 animate-pulse' : 'text-slate-700 dark:text-slate-300'}">
+                                    ${status}
+                                </div>
+                                <button onclick="State.resetTicTacToe()" class="text-slate-400 hover:text-brand-500 transition" title="Resetuj grę">
+                                    <i class="fas fa-redo-alt text-xl"></i>
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-3 mb-6 bg-slate-200 dark:bg-slate-700 p-3 rounded-xl">
+                                ${game.board.map((val, i) => `
+                                    <button onclick="State.playTicTacToe(${i})" 
+                                        class="w-20 h-20 rounded-lg text-4xl font-black flex items-center justify-center transition-all transform hover:scale-105 active:scale-95 shadow-sm
+                                        ${val === 'X' ? 'bg-brand-500 text-white' : (val === 'O' ? 'bg-rose-500 text-white' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-800 dark:text-white')}
+                                        ${(!val && !game.winner && game.xIsNext) ? 'cursor-pointer' : 'cursor-default'}"
+                                        ${(val || game.winner || !game.xIsNext) ? 'disabled' : ''}>
+                                        ${val || ''}
+                                    </button>
+                                `).join('')}
+                            </div>
+                            
+                            <div class="text-center text-xs text-slate-400 font-mono">
+                                Bot Level: Easy
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            Header: () => `
+                <div class="flex flex-col w-full z-10 shadow-sm">
+                    ${Components.SystemStatus()}
+                    <header class="h-16 bg-white dark:bg-slate-800 dark:border-slate-700 border-b border-slate-200 flex items-center justify-between px-6 transition-colors duration-300">
+                        <div class="flex items-center gap-4">
+                            <button onclick="State.session.isSidebarOpen = !State.session.isSidebarOpen; App.render()" class="text-slate-500 hover:text-brand-600 transition md:hidden">
+                                <i class="fas fa-bars text-xl"></i>
+                            </button>
+                            <h2 class="text-xl font-bold text-slate-800 dark:text-white capitalize">${State.session.view === 'movies' ? 'Repertuar' : (State.session.view === 'fun' ? 'Fun Zone 🎮' : State.session.view)}</h2>
+                        </div>
+
+                        <div class="flex items-center gap-4">
+                            ${!fileHandle ? `
+                                <button onclick="State.enableFileAccess()" class="flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-amber-200 transition animate-pulse">
+                                    <i class="fas fa-save"></i> Włącz Auto-Zapis
+                                </button>
+                            ` : `
+                                <div class="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-100">
+                                    <i class="fas fa-sync fa-spin"></i> Auto-Zapis Aktywny
+                                </div>
+                            `}
+                        </div>
+                    </header>
+                </div>
+            `,
+
+            Stats: () => {
+                const movies = State.data.movies.filter(m => !m.archived);
+                const total = movies.length;
+                const urgent = movies.filter(m => !m.diskReceived && Utils.daysDiff(m.playStart) <= 3).length;
+                const shipping = movies.filter(m => !m.isSent && m.shippingDeadline && Utils.daysDiff(m.shippingDeadline) <= 2).length;
+
+                return `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-slate-500 text-sm font-bold uppercase tracking-wider">Filmy w repertuarze</p>
+                                <h3 class="text-3xl font-extrabold text-slate-800 mt-1">${total}</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center text-xl">
+                                <i class="fas fa-film"></i>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-slate-500 text-sm font-bold uppercase tracking-wider">Braki Dysków (Pilne)</p>
+                                <h3 class="text-3xl font-extrabold text-rose-600 mt-1">${urgent}</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-xl">
+                                <i class="fas fa-hdd"></i>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                            <div>
+                                <p class="text-slate-500 text-sm font-bold uppercase tracking-wider">Wysyłki na dniach</p>
+                                <h3 class="text-3xl font-extrabold text-amber-500 mt-1">${shipping}</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xl">
+                                <i class="fas fa-car"></i>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+
+            MovieTable: (archiveMode = false) => {
+                // Initial render with current state
+                const term = State.session.searchTerm.toLowerCase();
+                const filteredMovies = App.getFilteredMovies(archiveMode);
+
+                return `
+                    <div class="flex flex-col h-full bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <!-- Toolbar -->
+                        <div class="p-4 border-b border-slate-200 flex flex-wrap gap-4 justify-between items-center bg-slate-50">
+                            <div class="relative flex-1 min-w-[200px] max-w-md">
+                                <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
+                                <input type="text" 
+                                    id="search-input"
+                                    value="${State.session.searchTerm}"
+                                    oninput="State.session.searchTerm = this.value; App.filterTable(${archiveMode})"
+                                    class="w-full pl-10 pr-4 py-2.5 rounded-lg border-slate-300 text-sm focus:ring-brand-500 focus:border-brand-500 shadow-sm"
+                                    placeholder="Szukaj filmu (tytuł, dystrybutor, miasto)...">
+                            </div>
+                            <div class="flex gap-2">
+                                ${!archiveMode ? `
+                                <button onclick="State.session.filterStatus = 'all'; App.filterTable(false); App.updateFilterButtons('all')" 
+                                    id="btn-filter-all"
+                                    class="px-4 py-2 rounded-lg text-xs font-bold transition ${State.session.filterStatus === 'all' ? 'bg-brand-600 text-white shadow-md' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'}">
+                                    Wszystkie
+                                </button>
+                                <button onclick="State.session.filterStatus = 'urgent'; App.filterTable(false); App.updateFilterButtons('urgent')" 
+                                    id="btn-filter-urgent"
+                                    class="px-4 py-2 rounded-lg text-xs font-bold transition ${State.session.filterStatus === 'urgent' ? 'bg-rose-600 text-white shadow-md' : 'bg-white border border-slate-300 text-slate-600 hover:bg-rose-50'}">
+                                    Pilne
+                                </button>
+                                <button onclick="document.getElementById('add-modal').classList.remove('hidden')" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow transition flex items-center gap-2">
+                                    <i class="fas fa-plus"></i> Dodaj
+                                </button>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="flex-1 overflow-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider sticky top-0 z-10 shadow-sm">
+                                    <tr>
+                                        <th class="px-4 py-3 font-bold border-b text-center w-24">Daty</th>
+                                        <th class="px-4 py-3 font-bold border-b w-64 bg-slate-100/50">Statusy Techniczne</th>
+                                        <th class="px-4 py-3 font-bold border-b w-80">Logistyka i Wysyłka</th>
+                                        <th class="px-4 py-3 font-bold border-b text-right w-20">Akcje</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100" id="movie-tbody">
+                                    ${Components.MovieTableRows(filteredMovies, archiveMode)}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            },
+
+            MovieTableRows: (movies, archiveMode) => {
+                 if (movies.length === 0) return `<tr><td colspan="4" class="p-8 text-center text-slate-400">Brak filmów spełniających kryteria.</td></tr>`;
+                 
+                 return movies.map(m => {
+                    const days = Utils.daysDiff(m.playStart);
+                    const isUrgent = !archiveMode && (
+                        (!m.diskReceived && days <= 3) ||
+                        (!m.keyNotRequired && !m.keyAvailable && days <= 2)
+                    );
+                    const keyDays = Utils.daysDiff(m.keyValidUntil);
+ 
+                    return `
+                    <tr class="${isUrgent ? 'bg-red-50/30' : ''}">
+                        <td colspan="4" class="px-4 py-4 border-b border-slate-100">
+                            <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                                <div class="flex-1">
+                                    <input type="text" value="${m.title}" onchange="State.updateMovie('${m.id}', 'title', this.value, { force: true })" 
+                                        class="block w-full font-bold text-slate-800 text-xl bg-transparent border-0 border-b border-transparent focus:border-brand-500 focus:ring-0 px-0 py-1 transition-all placeholder-slate-400" placeholder="Tytuł filmu">
+                                    <div class="text-xs text-slate-400 mt-1">Dodano: ${m.addedAt}</div>
+                                </div>
+                                <div class="md:w-1/2 w-full">
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Notatki</label>
+                                    <textarea rows="2" onchange="State.updateMovie('${m.id}', 'notes', this.value, { force: true })"
+                                        class="w-full text-sm border-slate-200 rounded-lg p-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50 placeholder-slate-400"
+                                        placeholder="Twoje notatki (max 2 linie)...">${m.notes || ''}</textarea>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="hover:bg-slate-50 transition-colors duration-150 ${isUrgent ? 'bg-red-50/30' : ''}">
+                        <td class="px-4 py-4 align-top text-center">
+                            <div class="flex flex-col gap-2">
+                                <label class="text-[10px] font-bold text-slate-400 uppercase">Start Filmu</label>
+                                <input type="date" value="${m.playStart}" onchange="State.updateMovie('${m.id}', 'playStart', this.value)" 
+                                    class="w-full text-sm border-slate-200 rounded px-2 py-1.5 focus:ring-brand-500 text-slate-700 font-mono font-bold">
+                                
+                                ${m.playStart && !archiveMode ? `
+                                    <div class="mt-1 text-xs font-bold ${days < 0 ? 'text-slate-400' : (days <= 3 ? 'text-rose-500' : 'text-brand-600')}">
+                                        ${days < 0 ? 'Po premierze' : `Za ${days} dni`}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 align-top bg-slate-50/50">
+                            <div class="space-y-4">
+                                <div class="flex items-center gap-3">
+                                    <button onclick="State.updateMovie('${m.id}', 'diskReceived', !${m.diskReceived}, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
+                                        class="w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${m.diskReceived ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' : 'bg-white border-2 border-slate-200 text-slate-300 hover:border-brand-400 hover:text-brand-400'}"
+                                        title="${m.diskReceived ? 'Dysk odebrany' : 'Kliknij, aby potwierdzić odbiór dysku'}">
+                                        <i class="fas fa-hdd text-xl"></i>
+                                    </button>
+                                    <div class="flex-1">
+                                         <span class="text-sm font-bold ${m.diskReceived ? 'text-emerald-700' : 'text-slate-500'}">
+                                            ${m.diskReceived ? 'Dysk na miejscu' : 'Brak dysku'}
+                                         </span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                     <button onclick="State.updateMovie('${m.id}', 'keyAvailable', !${m.keyAvailable}, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
+                                        class="w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${
+                                            m.keyNotRequired 
+                                                ? 'bg-slate-100 text-slate-400' 
+                                                : (m.keyAvailable ? 'bg-brand-100 text-brand-600 hover:bg-brand-200' : 'bg-white border-2 border-slate-200 text-slate-300 hover:border-amber-400 hover:text-amber-400')
+                                        }"
+                                        ${m.keyNotRequired ? 'disabled' : ''}
+                                        title="Status Klucza">
+                                        <i class="fas fa-key text-xl"></i>
+                                    </button>
+                                    <div class="flex-1 flex flex-col gap-1">
+                                        <div class="flex items-center justify-between">
+                                            <label class="flex items-center gap-2 cursor-pointer">
+                                                <input type="checkbox" ${m.keyNotRequired ? 'checked' : ''} onchange="State.updateMovie('${m.id}', 'keyNotRequired', this.checked, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
+                                                    class="w-3.5 h-3.5 rounded text-slate-500 focus:ring-slate-400 border-slate-300">
+                                                <span class="text-[10px] uppercase font-bold text-slate-400">Nie wymaga</span>
+                                            </label>
+                                        </div>
+                                        
+                                        ${!m.keyNotRequired ? `
+                                            <input type="date" value="${m.keyValidUntil || ''}" onchange="State.updateMovie('${m.id}', 'keyValidUntil', this.value, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
+                                                class="w-full text-xs border-0 border-b border-slate-200 bg-transparent focus:ring-0 py-1 px-0 text-slate-600 font-mono"
+                                                title="Klucz ważny do...">
+                                            <div class="text-[11px] font-bold ${
+                                                (m.keyAvailable && keyDays >= 2) ? 'text-brand-600' : 
+                                                (m.keyAvailable && keyDays === 1) ? 'text-amber-600' : 
+                                                (m.keyAvailable && keyDays === 0) ? 'text-rose-600' : 
+                                                'text-slate-500'
+                                            }">
+                                                ${
+                                                    (m.keyAvailable && keyDays >= 2) ? `Aktywny do ${m.keyValidUntil}` :
+                                                    (m.keyAvailable && keyDays === 1) ? 'Klucz wygasa jutro' :
+                                                    (m.keyAvailable && keyDays === 0) ? 'Klucz wygasa dziś' :
+                                                    (m.keyAvailable && keyDays < 0) ? 'Klucz wygasł' : ''
+                                                }
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 align-top">
+                             <div class="space-y-3">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <i class="fas fa-truck text-brand-500"></i>
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase">Wysyłka</label>
+                                </div>
+                                <div class="flex gap-2 mb-2">
+                                    <input type="date" value="${m.shippingDeadline}" onchange="State.updateMovie('${m.id}', 'shippingDeadline', this.value)" 
+                                        class="w-36 text-sm border-slate-200 rounded px-2 py-1.5 focus:ring-brand-500 text-slate-700 font-mono font-bold">
+                                    <label class="flex items-center gap-2 cursor-pointer bg-slate-100 px-2 rounded hover:bg-slate-200 transition">
+                                        <input type="checkbox" ${m.isSent ? 'checked' : ''} onchange="State.updateMovie('${m.id}', 'isSent', this.checked, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
+                                            class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300">
+                                        <span class="text-sm font-bold ${m.isSent ? 'text-emerald-600' : 'text-slate-600'}">${m.isSent ? 'Wysłano' : 'Oznacz jako wysłane'}</span>
+                                    </label>
+                                </div>
+                                <div class="relative">
+                                    <textarea rows="4" onchange="State.updateMovie('${m.id}', 'shippingDestination', this.value)" 
+                                        class="w-full text-sm border-slate-200 rounded-lg p-2.5 focus:ring-brand-500 focus:border-brand-500 resize-none bg-slate-50 placeholder-slate-400" 
+                                        placeholder="Adres wysyłki / Uwagi...">${m.shippingDestination || ''}</textarea>
+                                    <i class="fas fa-map-marker-alt absolute right-3 bottom-3 text-slate-300"></i>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 align-top text-right">
+                             ${!archiveMode ? `
+                                <button onclick="State.toggleArchive('${m.id}')" class="text-slate-400 hover:text-amber-500 transition p-2 rounded-full hover:bg-amber-50" title="Przenieś do archiwum">
+                                    <i class="fas fa-box-archive fa-lg"></i>
+                                </button>
+                             ` : `
+                                <div class="flex flex-col gap-2 items-end">
+                                    <button onclick="State.toggleArchive('${m.id}')" class="text-slate-400 hover:text-emerald-600 transition p-2 rounded-full hover:bg-emerald-50" title="Przywróć">
+                                        <i class="fas fa-trash-restore-alt fa-lg"></i>
+                                    </button>
+                                    ${State.session.user.role === 'admin' ? `
+                                    <button onclick="State.deleteMovie('${m.id}')" class="text-slate-400 hover:text-rose-600 transition p-2 rounded-full hover:bg-rose-50" title="Usuń trwale">
+                                        <i class="fas fa-trash-alt fa-lg"></i>
+                                    </button>
+                                    ` : ''}
+                                </div>
+                             `}
+                        </td>
+                    </tr>
+                 `;
+                 }).join('');
+            },
+
+            AddModal: () => `
+                <div id="add-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-bounce-in">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-bold text-slate-800">Dodaj nowy film</h3>
+                            <button onclick="document.getElementById('add-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times fa-lg"></i></button>
+                        </div>
+                        <form onsubmit="event.preventDefault(); State.addMovie({ title: this.t.value, playStart: this.d.value }); this.reset(); document.getElementById('add-modal').classList.add('hidden');" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-1">Tytuł filmu</label>
+                                <input name="t" type="text" class="w-full rounded-lg border-slate-300 focus:ring-brand-500 p-3 bg-slate-50" placeholder="Wpisz tytuł..." required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-1">Data premiery / startu</label>
+                                <input name="d" type="date" class="w-full rounded-lg border-slate-300 focus:ring-brand-500 p-3 bg-slate-50" required>
+                            </div>
+                            <div class="pt-4 flex justify-end gap-3">
+                                <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')" class="px-5 py-2.5 rounded-lg text-slate-600 hover:bg-slate-100 font-medium transition">Anuluj</button>
+                                <button type="submit" class="bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-lg font-bold shadow-lg transition transform active:scale-95">Dodaj Film</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `,
+
+            Users: () => `
+                <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                    <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                        <div class="font-bold text-slate-700 text-lg"><i class="fas fa-users-cog mr-2"></i> Zarządzanie Użytkownikami</div>
+                    </div>
+                    
+                    <div class="p-6 border-b border-slate-200 bg-white">
+                        <form onsubmit="event.preventDefault(); State.addUser(this.u.value, this.p.value, this.r.value); this.reset();" class="flex gap-4 items-end">
+                            <div class="flex-1">
+                                <label class="block text-xs font-bold text-slate-500 mb-1">LOGIN</label>
+                                <input type="text" name="u" class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:ring-brand-500 bg-slate-50" placeholder="Nowy login" required>
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-xs font-bold text-slate-500 mb-1">HASŁO</label>
+                                <input type="text" name="p" class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:ring-brand-500 bg-slate-50" placeholder="Hasło" required>
+                            </div>
+                            <div class="w-40">
+                                <label class="block text-xs font-bold text-slate-500 mb-1">ROLA</label>
+                                <select name="r" class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:ring-brand-500 bg-slate-50">
+                                    <option value="user">Pracownik</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="bg-brand-600 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-brand-700 shadow-md transition">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="overflow-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50 text-xs text-slate-400 uppercase tracking-wider">
+                                <tr>
+                                    <th class="px-6 py-4">Użytkownik</th>
+                                    <th class="px-6 py-4">Rola</th>
+                                    <th class="px-6 py-4">Hasło</th>
+                                    <th class="px-6 py-4 text-right">Akcja</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                ${State.data.users.map(u => `
+                                    <tr class="group hover:bg-slate-50 transition">
+                                        <td class="px-6 py-4 font-bold text-slate-800 flex items-center gap-3">
+                                            <div class="w-8 h-8 rounded-full flex items-center justify-center ${u.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}">
+                                                <i class="fas fa-user"></i>
+                                            </div>
+                                            ${u.username}
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
+                                                ${u.role}
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 font-mono text-slate-400 text-xs">••••••</td>
+                                        <td class="px-6 py-4 text-right">
+                                            ${u.username !== 'admin' ? `
+                                            <button onclick="State.deleteUser('${u.username}')" class="text-slate-300 hover:text-red-600 transition p-2 rounded hover:bg-red-50"><i class="fas fa-trash-alt"></i></button>
+                                            ` : ''}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `,
+
+            Logs: () => `
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 h-full overflow-hidden flex flex-col">
+                    <div class="p-4 border-b border-slate-200 bg-slate-50 font-bold text-slate-700">
+                        <i class="fas fa-history mr-2"></i> Logi Aktywności
+                    </div>
+                    <div class="overflow-auto flex-1 p-0">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
+                                <tr>
+                                    <th class="px-6 py-3">Czas</th>
+                                    <th class="px-6 py-3">Użytkownik</th>
+                                    <th class="px-6 py-3">Akcja</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                ${State.data.logs.map(l => `
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="px-6 py-3 text-slate-500 font-mono text-xs">${l.timestamp}</td>
+                                        <td class="px-6 py-3 font-bold text-slate-700">${l.user}</td>
+                                        <td class="px-6 py-3 text-slate-600">${l.action}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `
+        };
+
+        // --- APP CONTROLLER ---
+
+        const App = {
+            render: () => {
+                const app = document.getElementById('app');
+                if (!State.session.user) {
+                    app.innerHTML = Components.Login();
+                    return;
+                }
+
+                // Main Layout
+                app.innerHTML = `
+                    ${Components.Sidebar()}
+                    <div class="flex-1 flex flex-col h-full bg-slate-100 dark:bg-slate-900 overflow-hidden relative transition-colors duration-300">
+                        ${Components.Header()}
+                        <main id="main-content" class="flex-1 overflow-y-auto p-6 fade-in">
+                            <!-- Content -->
+                        </main>
+                        ${Components.AddModal()}
+                    </div>
+                `;
+                App.renderContent();
+            },
+
+            getFilteredMovies: (archiveMode) => {
+                 return State.data.movies.filter(m => {
+                    if (archiveMode !== m.archived) return false;
+                    const term = State.session.searchTerm.toLowerCase();
+                    
+                    // Search
+                    if (term) {
+                         const matchTitle = m.title.toLowerCase().includes(term);
+                         const matchDist = m.distributor ? m.distributor.toLowerCase().includes(term) : false;
+                         const matchDest = m.shippingDestination ? m.shippingDestination.toLowerCase().includes(term) : false;
+                         if (!matchTitle && !matchDist && !matchDest) return false;
+                    }
+
+                    // Filter Status
+                    if (State.session.filterStatus === 'urgent') {
+                         const urgent = (!m.diskReceived && Utils.daysDiff(m.playStart) <= 3) || 
+                                        (!m.keyNotRequired && !m.keyAvailable && Utils.daysDiff(m.playStart) <= 2) ||
+                                        (!m.isSent && m.shippingDeadline && Utils.daysDiff(m.shippingDeadline) <= 2);
+                         if (!urgent) return false;
+                    }
+                    return true;
+                }).sort((a, b) => new Date(a.playStart || '2999-01-01') - new Date(b.playStart || '2999-01-01'));
+            },
+
+            filterTable: (archiveMode = false) => {
+                const tbody = document.getElementById('movie-tbody');
+                if (!tbody) return;
+                const movies = App.getFilteredMovies(archiveMode);
+                tbody.innerHTML = Components.MovieTableRows(movies, archiveMode);
+            },
+
+            updateFilterButtons: (activeId) => {
+                const allBtn = document.getElementById('btn-filter-all');
+                const urgentBtn = document.getElementById('btn-filter-urgent');
+                
+                if(allBtn && urgentBtn) {
+                     const baseClass = "px-4 py-2 rounded-lg text-xs font-bold transition";
+                     const activeClass = "bg-brand-600 text-white shadow-md";
+                     const inactiveClass = "bg-white border border-slate-300 text-slate-600 hover:bg-slate-50";
+                     const urgentActiveClass = "bg-rose-600 text-white shadow-md";
+                     const urgentInactiveClass = "bg-white border border-slate-300 text-slate-600 hover:bg-rose-50";
+
+                     if (activeId === 'all') {
+                         allBtn.className = `${baseClass} ${activeClass}`;
+                         urgentBtn.className = `${baseClass} ${urgentInactiveClass}`;
+                     } else {
+                         allBtn.className = `${baseClass} ${inactiveClass}`;
+                         urgentBtn.className = `${baseClass} ${urgentActiveClass}`;
+                     }
+                }
+            },
+
+            renderContent: () => {
+                const main = document.getElementById('main-content');
+                const view = State.session.view;
+                
+                if (view === 'dashboard') {
+                    main.innerHTML = `
+                        ${Components.Stats()}
+                        <div class="h-auto">
+                             <h3 class="text-lg font-bold text-slate-800 mb-4">Najbliższe Premiery</h3>
+                             ${Components.MovieTable(false)}
+                        </div>
+                    `;
+                } else if (view === 'movies') {
+                    main.innerHTML = Components.MovieTable(false);
+                } else if (view === 'archive') {
+                    main.innerHTML = Components.MovieTable(true);
+                } else if (view === 'logs') {
+                    main.innerHTML = Components.Logs();
+                } else if (view === 'users') {
+                    main.innerHTML = Components.Users();
+                } else if (view === 'fun') {
+                    main.innerHTML = Components.TicTacToe();
+                }
+            }
+        };
+
+        // --- INIT ---
+        window.addEventListener('DOMContentLoaded', () => {
+            State.init();
+            App.render();
+        });
+
+    </script>
+</body>
+</html>
