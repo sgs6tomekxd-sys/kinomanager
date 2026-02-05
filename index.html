@@ -96,12 +96,12 @@
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbmpuYWV1bW1ia3hpZWhlYndtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyOTMwODcsImV4cCI6MjA4NTg2OTA4N30.nfeDUx0og_siNY0kEKSxacPTsmlcovmkV9symw4_P5s';
         
         // Zmienna globalna supabase (używamy var aby uniknąć błędu re-deklaracji)
-        var supabase = null;
+        var supabaseClient = null;
         try {
             if (typeof window.supabase === 'undefined') {
                 alert("BŁĄD KRYTYCZNY: Biblioteka Supabase się nie załadowała!\nSprawdź połączenie internetowe lub wyłącz AdBlocka.");
             } else if (SUPABASE_URL !== 'TWOJ_SUPABASE_URL') {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
             }
         } catch (e) { 
             console.error("Supabase init error", e);
@@ -275,12 +275,12 @@ end $$;
                 }
 
                 try {
-                    if (supabase) {
+                    if (supabaseClient) {
                         // --- SUPABASE MODE ---
                         // console.log("Connecting to Supabase...");
                         
                         // Check Connection & Tables
-                        const { error } = await supabase.from('users').select('count', { count: 'exact', head: true });
+                        const { error } = await supabaseClient.from('users').select('count', { count: 'exact', head: true });
                         if (error) {
                             console.error("Supabase Error:", error);
                             // Show Setup Modal if tables missing
@@ -308,7 +308,7 @@ end $$;
                         }
 
                         const fetchTable = async (table, select) => {
-                            const { data, error } = await supabase.from(table).select(select);
+                            const { data, error } = await supabaseClient.from(table).select(select);
                             if (error) throw new Error(`Błąd pobierania tabeli ${table}: ${error.message}`);
                             return data;
                         };
@@ -389,8 +389,8 @@ end $$;
             },
 
             subscribeToChanges: () => {
-                if (!supabase) return;
-                const channel = supabase.channel('public:data')
+                if (!supabaseClient) return;
+                const channel = supabaseClient.channel('public:data')
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'movies' }, payload => {
                         State.handleRealtimeUpdate('movies', payload);
                     })
@@ -465,7 +465,7 @@ end $$;
 
             syncData: async () => {
                 // Supabase handles this via Realtime, so we skip if connected
-                if (supabase) return;
+                if (supabaseClient) return;
 
                 // Don't sync if user is typing (active element is input/textarea)
                 const active = document.activeElement;
@@ -519,9 +519,9 @@ end $$;
                     action: action
                 };
 
-                if (supabase) {
+                if (supabaseClient) {
                     // Fire and forget log to Supabase
-                    supabase.from('logs').insert({
+                    supabaseClient.from('logs').insert({
                         id: log.id,
                         user_name: log.user,
                         action: log.action,
@@ -592,11 +592,11 @@ end $$;
 
                 // If Supabase is active, we rely on it for persistence.
                 // We only proceed with File/API save if NOT using Supabase, OR if FileHandle is explicitly connected for backup.
-                if (supabase && !fileHandle) return;
+                if (supabaseClient && !fileHandle) return;
 
                 // Save to API (Primary persistence for Legacy)
                 const saveToApi = async () => {
-                    if (supabase) return; // Don't save to legacy API if Supabase is on
+                    if (supabaseClient) return; // Don't save to legacy API if Supabase is on
                     try {
                         await fetch('/api/data', {
                             method: 'POST',
@@ -662,7 +662,7 @@ end $$;
                     archived: false
                 };
 
-                if (supabase) {
+                if (supabaseClient) {
                     const dbMovie = {
                         id: movie.id,
                         title: movie.title,
@@ -680,7 +680,7 @@ end $$;
                         added_at: movie.addedAt
                     };
                     
-                    const { error } = await supabase.from('movies').insert(dbMovie);
+                    const { error } = await supabaseClient.from('movies').insert(dbMovie);
                     if (error) {
                         console.error(error);
                         Toast.show("Błąd zapisu do Supabase", "error");
@@ -702,7 +702,7 @@ end $$;
                 if (movie) {
                     movie[field] = value;
                     
-                    if (supabase) {
+                    if (supabaseClient) {
                         // Map field to snake_case
                         const fieldMap = {
                             playStart: 'play_start',
@@ -717,7 +717,7 @@ end $$;
                             addedAt: 'added_at'
                         };
                         const dbField = fieldMap[field] || field;
-                        await supabase.from('movies').update({ [dbField]: value }).eq('id', id);
+                        await supabaseClient.from('movies').update({ [dbField]: value }).eq('id', id);
                     } else {
                         State.save(opts.force === true);
                     }
@@ -734,8 +734,8 @@ end $$;
                     movie.archived = !movie.archived;
                     const action = movie.archived ? 'Zarchiwizowano' : 'Przywrócono';
                     
-                    if (supabase) {
-                        await supabase.from('movies').update({ archived: movie.archived }).eq('id', id);
+                    if (supabaseClient) {
+                        await supabaseClient.from('movies').update({ archived: movie.archived }).eq('id', id);
                         State.logAction(`${action} film: ${movie.title}`);
                     } else {
                         State.logAction(`${action} film: ${movie.title}`);
@@ -752,8 +752,8 @@ end $$;
                 if (idx !== -1) {
                     const title = State.data.movies[idx].title;
                     
-                    if (supabase) {
-                        await supabase.from('movies').delete().eq('id', id);
+                    if (supabaseClient) {
+                        await supabaseClient.from('movies').delete().eq('id', id);
                         State.logAction(`Usunięto trwale film: ${title}`);
                         // Local removal handled by Realtime or optimistic
                         State.data.movies.splice(idx, 1); 
@@ -772,8 +772,8 @@ end $$;
                     return Toast.show("Użytkownik już istnieje!", "error");
                 }
                 
-                if (supabase) {
-                    const { error } = await supabase.from('users').insert({ username, password, role });
+                if (supabaseClient) {
+                    const { error } = await supabaseClient.from('users').insert({ username, password, role });
                     if (error) {
                          console.error(error);
                          Toast.show("Błąd dodawania (może duplikat?)", "error");
@@ -792,8 +792,8 @@ end $$;
             deleteUser: async (username) => {
                 if (username === 'admin') return Toast.show("Nie można usunąć administratora!", "error");
                 
-                if (supabase) {
-                    await supabase.from('users').delete().eq('username', username);
+                if (supabaseClient) {
+                    await supabaseClient.from('users').delete().eq('username', username);
                     State.logAction(`Usunięto użytkownika: ${username}`);
                     State.data.users = State.data.users.filter(u => u.username !== username);
                 } else {
@@ -1010,9 +1010,9 @@ end $$;
                             <h2 class="text-xl font-bold text-slate-800 dark:text-white capitalize">${State.session.view === 'movies' ? 'Repertuar' : State.session.view}</h2>
                             
                             <!-- Connection Status -->
-                            <div class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${supabase ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">
-                                <div class="w-2 h-2 rounded-full ${supabase ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}"></div>
-                                ${supabase ? 'Online (Baza Danych)' : 'Tryb Lokalny (Brak Sync)'}
+                            <div class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${supabaseClient ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}">
+                                <div class="w-2 h-2 rounded-full ${supabaseClient ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}"></div>
+                                ${supabaseClient ? 'Online (Baza Danych)' : 'Tryb Lokalny (Brak Sync)'}
                             </div>
                         </div>
 
@@ -1200,7 +1200,7 @@ end $$;
                                             <label class="flex items-center gap-2 cursor-pointer">
                                                 <input type="checkbox" ${m.keyNotRequired ? 'checked' : ''} onchange="State.updateMovie('${m.id}', 'keyNotRequired', this.checked, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
                                                     class="w-3.5 h-3.5 rounded text-slate-500 focus:ring-slate-400 border-slate-300">
-                                                <span class="text-[10px] uppercase font-bold text-slate-400">Nie wymaga</span>
+                                                <span class="text-[10px] uppercase font-bold text-slate-400 uppercase">Nie wymaga</span>
                                             </label>
                                         </div>
                                         
