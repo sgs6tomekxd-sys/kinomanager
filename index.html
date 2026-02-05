@@ -23,7 +23,10 @@
     
     <!-- External Libs -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase with Fallback -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>if(typeof supabase === 'undefined') document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\/script>')</script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -95,10 +98,15 @@
         // Zmienna globalna supabase (używamy var aby uniknąć błędu re-deklaracji)
         var supabase = null;
         try {
-            if (typeof window.supabase !== 'undefined' && SUPABASE_URL !== 'TWOJ_SUPABASE_URL') {
+            if (typeof window.supabase === 'undefined') {
+                alert("BŁĄD KRYTYCZNY: Biblioteka Supabase się nie załadowała!\nSprawdź połączenie internetowe lub wyłącz AdBlocka.");
+            } else if (SUPABASE_URL !== 'TWOJ_SUPABASE_URL') {
                 supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
             }
-        } catch (e) { console.error("Supabase init error", e); }
+        } catch (e) { 
+            console.error("Supabase init error", e);
+            alert("BŁĄD INICJALIZACJI: " + e.message);
+        }
 
         // --- SERVICES & UTILS ---
         
