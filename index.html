@@ -1,6 +1,22 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            // Ignoruj błędy ResizeObserver (częste w Chrome)
+            if (msg.includes('ResizeObserver')) return;
+            
+            document.body.innerHTML = `
+                <div style="padding: 20px; color: red; font-family: monospace; background: #xffe; border: 2px solid red;">
+                    <h1>Błąd Krytyczny</h1>
+                    <p><strong>Błąd:</strong> ${msg}</p>
+                    <p><strong>Linia:</strong> ${line}</p>
+                    <p>Skopiuj ten błąd i wyślij do programisty.</p>
+                </div>
+            `;
+            return false;
+        };
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KinoManager Pro</title>
