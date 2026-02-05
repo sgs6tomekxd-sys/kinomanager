@@ -92,9 +92,10 @@
         const SUPABASE_URL = 'https://udnjnaeummbkxiehebwm.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkbmpuYWV1bW1ia3hpZWhlYndtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyOTMwODcsImV4cCI6MjA4NTg2OTA4N30.nfeDUx0og_siNY0kEKSxacPTsmlcovmkV9symw4_P5s';
         
-        let supabase = null;
+        // Zmienna globalna supabase (używamy var aby uniknąć błędu re-deklaracji)
+        var supabase = null;
         try {
-            if (SUPABASE_URL !== 'TWOJ_SUPABASE_URL') {
+            if (typeof window.supabase !== 'undefined' && SUPABASE_URL !== 'TWOJ_SUPABASE_URL') {
                 supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
             }
         } catch (e) { console.error("Supabase init error", e); }
