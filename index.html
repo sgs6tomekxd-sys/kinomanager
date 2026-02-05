@@ -421,7 +421,8 @@ end $$;
                     keyAvailable: m.key_available,
                     keyNotRequired: m.key_not_required,
                     keyValidUntil: m.key_valid_until,
-                    addedAt: m.added_at
+                    addedAt: m.added_at,
+                    notes: m.notes // Ensure notes are mapped if added
                 });
 
                 const mapLog = (l) => ({
@@ -433,7 +434,7 @@ end $$;
 
                 if (table === 'movies') {
                     if (eventType === 'INSERT') {
-                        // Check if not already exists (prevent double add from local optimistic update)
+                        // Check if not already exists
                         if (!State.data.movies.find(m => m.id === newRec.id)) {
                             State.data.movies.push(mapMovie(newRec));
                         }
@@ -460,7 +461,24 @@ end $$;
                      }
                 }
                 
-                App.render();
+                // --- INTELIGENTNE ODŚWIEŻANIE (Fix mrugania) ---
+                App.updateSystemStatus(); // Zawsze odśwież pasek statusu (górny)
+
+                // Jeśli jesteśmy w widoku tabeli filmów, odświeżamy tylko tabelę (zachowuje focus i scroll)
+                if ((State.session.view === 'movies' || State.session.view === 'archive') && table === 'movies') {
+                    App.filterTable(State.session.view === 'archive');
+                } 
+                // Jeśli Dashboard i zmieniły się filmy (statystyki)
+                else if (State.session.view === 'dashboard' && table === 'movies') {
+                     // Dashboard jest złożony, tu można by zrobić updateStats() ale renderContent jest bezpieczniejszy niż render()
+                     App.renderContent();
+                }
+                // Logi i Użytkownicy - rzadkie zmiany, można odświeżyć content
+                else if ((State.session.view === 'logs' && table === 'logs') || (State.session.view === 'users' && table === 'users')) {
+                    App.filterTable(false); // Logi używają tabeli? Nie, Logs() to osobny komponent.
+                    App.renderContent();
+                }
+                // Domyślnie nic nie rób jeśli zmiana nie dotyczy obecnego widoku (np. zmiana w logach gdy oglądam filmy)
             },
 
             syncData: async () => {
@@ -1001,7 +1019,9 @@ end $$;
 
             Header: () => `
                 <div class="flex flex-col w-full z-10 shadow-sm">
-                    ${Components.SystemStatus()}
+                    <div id="system-status-container">
+                        ${Components.SystemStatus()}
+                    </div>
                     <header class="h-16 bg-white dark:bg-slate-800 dark:border-slate-700 border-b border-slate-200 flex items-center justify-between px-6 transition-colors duration-300">
                         <div class="flex items-center gap-4">
                             <button onclick="State.session.isSidebarOpen = !State.session.isSidebarOpen; App.render()" class="text-slate-500 hover:text-brand-600 transition md:hidden">
@@ -1396,6 +1416,13 @@ end $$;
         // --- APP CONTROLLER ---
 
         const App = {
+            updateSystemStatus: () => {
+                const container = document.getElementById('system-status-container');
+                if (container) {
+                    container.innerHTML = Components.SystemStatus();
+                }
+            },
+
             render: () => {
                 const app = document.getElementById('app');
                 if (!State.session.user) {
