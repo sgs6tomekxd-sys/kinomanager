@@ -1161,27 +1161,32 @@ end $$;
                     const urgencyClass = isUrgent ? 'bg-red-50/40' : 'bg-white';
 
                     return `
-                    <tr class="${urgencyClass}">
+                    <tr class="border-t-8 border-slate-100 ${urgencyClass}">
                         <td colspan="4" class="px-6 py-4 border-b border-dashed border-slate-200">
                             <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                                 <div class="flex-1">
-                                    <input type="text" value="${m.title}" onchange="State.updateMovie('${m.id}', 'title', this.value, { force: true })" 
-                                        class="block w-full font-bold text-slate-800 text-xl bg-transparent border-0 border-b border-transparent focus:border-brand-500 focus:ring-0 px-0 py-1 transition-all placeholder-slate-400" placeholder="Tytuł filmu">
-                                    <div class="text-xs text-slate-400 mt-1">Dodano: ${m.addedAt}</div>
+                                    <div class="flex items-center gap-2">
+                                         <div class="w-1 h-6 bg-brand-500 rounded-full"></div>
+                                         <input type="text" value="${m.title}" onchange="State.updateMovie('${m.id}', 'title', this.value, { force: true })" 
+                                            class="block w-full font-bold text-slate-800 text-xl bg-transparent border-0 border-b border-transparent focus:border-brand-500 focus:ring-0 px-0 py-1 transition-all placeholder-slate-400" placeholder="Tytuł filmu">
+                                    </div>
+                                    <div class="text-xs text-slate-400 mt-1 ml-3">Dodano: ${m.addedAt}</div>
                                 </div>
-                                <div class="md:w-1/2 w-full">
-                                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Notatki</label>
+                                <div class="md:w-1/2 w-full bg-yellow-50/50 p-2 rounded-lg border border-yellow-100">
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                                        <i class="fas fa-sticky-note text-yellow-400"></i> Notatki
+                                    </label>
                                     <textarea rows="2" onchange="State.updateMovie('${m.id}', 'notes', this.value, { force: true })"
-                                        class="w-full text-sm border-slate-200 rounded-lg p-2 focus:ring-brand-500 focus:border-brand-500 bg-slate-50 placeholder-slate-400"
-                                        placeholder="Twoje notatki (max 2 linie)...">${m.notes || ''}</textarea>
+                                        class="w-full text-sm border-0 bg-transparent focus:ring-0 p-0 text-slate-600 placeholder-slate-300 resize-none"
+                                        placeholder="Kliknij, aby dodać notatkę...">${m.notes || ''}</textarea>
                                 </div>
                             </div>
                         </td>
                     </tr>
-                    <tr class="${urgencyClass} hover:bg-slate-50 transition-colors duration-150">
-                        <td class="px-6 py-5 align-top text-center border-b-8 border-slate-100">
-                            <div class="flex flex-col gap-2">
-                                <label class="text-[10px] font-bold text-slate-400 uppercase">Start Filmu</label>
+                    <tr class="${urgencyClass} hover:bg-slate-50 transition-colors duration-150 border-b-8 border-slate-100 shadow-sm">
+                        <td class="px-6 py-5 align-top text-center border-r border-slate-100 w-1/4">
+                            <div class="flex flex-col gap-2 h-full justify-start">
+                                <div class="font-bold text-xs text-slate-400 uppercase tracking-wide mb-1">Premiera</div>
                                 <input type="date" value="${m.playStart}" onchange="State.updateMovie('${m.id}', 'playStart', this.value)" 
                                     class="w-full text-sm border-slate-200 rounded px-2 py-1.5 focus:ring-brand-500 text-slate-700 font-mono font-bold">
                                 
@@ -1192,86 +1197,85 @@ end $$;
                                 ` : ''}
                             </div>
                         </td>
-                        <td class="px-6 py-5 align-top bg-slate-50/50 border-b-8 border-slate-100">
+                        <td class="px-6 py-5 align-top border-r border-slate-100 bg-slate-50/30 w-1/3">
                             <div class="space-y-4">
-                                <div class="flex items-center gap-3">
+                                <div class="font-bold text-xs text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-2">
+                                    <i class="fas fa-microchip"></i> Status Techniczny
+                                </div>
+                                <div class="flex items-center gap-3 p-2 rounded-lg transition-colors ${m.diskReceived ? 'bg-emerald-50 border border-emerald-100' : 'bg-white border border-slate-200'}">
                                     <button onclick="State.updateMovie('${m.id}', 'diskReceived', !${m.diskReceived}, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
-                                        class="w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${m.diskReceived ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' : 'bg-white border-2 border-slate-200 text-slate-300 hover:border-brand-400 hover:text-brand-400'}"
+                                        class="w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm ${m.diskReceived ? 'bg-emerald-500 text-white' : 'bg-white border-2 border-slate-200 text-slate-300 hover:border-brand-400 hover:text-brand-400'}"
                                         title="${m.diskReceived ? 'Dysk odebrany' : 'Kliknij, aby potwierdzić odbiór dysku'}">
-                                        <i class="fas fa-hdd text-xl"></i>
+                                        <i class="fas fa-hdd text-sm"></i>
                                     </button>
                                     <div class="flex-1">
-                                         <span class="text-sm font-bold ${m.diskReceived ? 'text-emerald-700' : 'text-slate-500'}">
-                                            ${m.diskReceived ? 'Dysk na miejscu' : 'Brak dysku'}
+                                         <span class="text-xs font-bold ${m.diskReceived ? 'text-emerald-700' : 'text-slate-500'}">
+                                            ${m.diskReceived ? 'DYSK ODEBRANY' : 'Oczekuje na dysk'}
                                          </span>
                                     </div>
                                 </div>
-                                <div class="flex items-center gap-3">
+                                <div class="flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                                    m.keyNotRequired 
+                                        ? 'bg-slate-50' 
+                                        : (m.keyAvailable ? 'bg-brand-50 border border-brand-100' : 'bg-white border border-slate-200')
+                                }">
                                      <button onclick="State.updateMovie('${m.id}', 'keyAvailable', !${m.keyAvailable}, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
-                                        class="w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${
+                                        class="w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm ${
                                             m.keyNotRequired 
-                                                ? 'bg-slate-100 text-slate-400' 
-                                                : (m.keyAvailable ? 'bg-brand-100 text-brand-600 hover:bg-brand-200' : 'bg-white border-2 border-slate-200 text-slate-300 hover:border-amber-400 hover:text-amber-400')
+                                                ? 'bg-slate-200 text-slate-400' 
+                                                : (m.keyAvailable ? 'bg-brand-500 text-white' : 'bg-white border-2 border-slate-200 text-slate-300 hover:border-amber-400 hover:text-amber-400')
                                         }"
                                         ${m.keyNotRequired ? 'disabled' : ''}
                                         title="Status Klucza">
-                                        <i class="fas fa-key text-xl"></i>
+                                        <i class="fas fa-key text-sm"></i>
                                     </button>
-                                    <div class="flex-1 flex flex-col gap-1">
-                                        <div class="flex items-center justify-between">
-                                            <label class="flex items-center gap-2 cursor-pointer">
+                                    <div class="flex-1 flex flex-col">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-xs font-bold ${m.keyAvailable ? 'text-brand-700' : 'text-slate-500'}">
+                                                ${m.keyAvailable ? 'KLUCZ WGRANY' : 'Klucz KDM'}
+                                            </span>
+                                            <label class="flex items-center gap-1 cursor-pointer">
                                                 <input type="checkbox" ${m.keyNotRequired ? 'checked' : ''} onchange="State.updateMovie('${m.id}', 'keyNotRequired', this.checked, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
-                                                    class="w-3.5 h-3.5 rounded text-slate-500 focus:ring-slate-400 border-slate-300">
-                                                <span class="text-[10px] uppercase font-bold text-slate-400 uppercase">Nie wymaga</span>
+                                                    class="w-3 h-3 rounded text-slate-400 focus:ring-0 border-slate-300">
+                                                <span class="text-[9px] uppercase font-bold text-slate-400">Bez klucza</span>
                                             </label>
                                         </div>
                                         
                                         ${!m.keyNotRequired ? `
                                             <input type="date" value="${m.keyValidUntil || ''}" onchange="State.updateMovie('${m.id}', 'keyValidUntil', this.value, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
-                                                class="w-full text-xs border-0 border-b border-slate-200 bg-transparent focus:ring-0 py-1 px-0 text-slate-600 font-mono"
+                                                class="w-full text-[10px] border-0 border-b border-slate-200 bg-transparent focus:ring-0 py-0 px-0 text-slate-600 font-mono"
                                                 title="Klucz ważny do...">
-                                            <div class="text-[11px] font-bold ${
-                                                (m.keyAvailable && keyDays >= 2) ? 'text-brand-600' : 
-                                                (m.keyAvailable && keyDays === 1) ? 'text-amber-600' : 
-                                                (m.keyAvailable && keyDays === 0) ? 'text-rose-600' : 
-                                                'text-slate-500'
-                                            }">
-                                                ${
-                                                    (m.keyAvailable && keyDays >= 2) ? `Aktywny do ${m.keyValidUntil}` :
-                                                    (m.keyAvailable && keyDays === 1) ? 'Klucz wygasa jutro' :
-                                                    (m.keyAvailable && keyDays === 0) ? 'Klucz wygasa dziś' :
-                                                    (m.keyAvailable && keyDays < 0) ? 'Klucz wygasł' : ''
-                                                }
-                                            </div>
                                         ` : ''}
                                     </div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-6 py-5 align-top border-b-8 border-slate-100">
+                        <td class="px-6 py-5 align-top border-r border-slate-100 w-1/3">
                              <div class="space-y-3">
-                                <div class="flex items-center gap-2 mb-1">
-                                    <i class="fas fa-truck text-brand-500"></i>
-                                    <label class="text-[10px] font-bold text-slate-400 uppercase">Wysyłka</label>
+                                <div class="font-bold text-xs text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-2">
+                                    <i class="fas fa-truck"></i> Logistyka
                                 </div>
-                                <div class="flex gap-2 mb-2">
+                                <div class="bg-white border border-slate-200 p-3 rounded-lg shadow-sm">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="text-[10px] font-bold text-slate-400 uppercase">Termin zwrotu</span>
+                                        <label class="flex items-center gap-1 cursor-pointer bg-slate-50 px-2 py-0.5 rounded border border-slate-100 hover:bg-slate-100 transition">
+                                            <input type="checkbox" ${m.isSent ? 'checked' : ''} onchange="State.updateMovie('${m.id}', 'isSent', this.checked, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
+                                                class="w-3.5 h-3.5 rounded text-emerald-500 focus:ring-emerald-500 border-slate-300">
+                                            <span class="text-[10px] font-bold ${m.isSent ? 'text-emerald-600' : 'text-slate-500'} uppercase">${m.isSent ? 'Wysłano' : 'Oznacz wysłanie'}</span>
+                                        </label>
+                                    </div>
                                     <input type="date" value="${m.shippingDeadline}" onchange="State.updateMovie('${m.id}', 'shippingDeadline', this.value)" 
-                                        class="w-36 text-sm border-slate-200 rounded px-2 py-1.5 focus:ring-brand-500 text-slate-700 font-mono font-bold">
-                                    <label class="flex items-center gap-2 cursor-pointer bg-slate-100 px-2 rounded hover:bg-slate-200 transition">
-                                        <input type="checkbox" ${m.isSent ? 'checked' : ''} onchange="State.updateMovie('${m.id}', 'isSent', this.checked, { rerender: true, archiveMode: ${archiveMode}, force: true })" 
-                                            class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300">
-                                        <span class="text-sm font-bold ${m.isSent ? 'text-emerald-600' : 'text-slate-600'}">${m.isSent ? 'Wysłano' : 'Oznacz jako wysłane'}</span>
-                                    </label>
-                                </div>
-                                <div class="relative">
-                                    <textarea rows="4" onchange="State.updateMovie('${m.id}', 'shippingDestination', this.value)" 
-                                        class="w-full text-sm border-slate-200 rounded-lg p-2.5 focus:ring-brand-500 focus:border-brand-500 resize-none bg-slate-50 placeholder-slate-400" 
-                                        placeholder="Adres wysyłki / Uwagi...">${m.shippingDestination || ''}</textarea>
-                                    <i class="fas fa-map-marker-alt absolute right-3 bottom-3 text-slate-300"></i>
+                                        class="w-full text-sm border-slate-200 rounded px-2 py-1 focus:ring-brand-500 text-slate-700 font-mono font-bold mb-2 bg-slate-50">
+                                    
+                                    <div class="relative mt-2">
+                                        <textarea rows="2" onchange="State.updateMovie('${m.id}', 'shippingDestination', this.value)" 
+                                            class="w-full text-xs border-0 border-t border-dashed border-slate-200 p-2 focus:ring-0 resize-none bg-transparent placeholder-slate-400" 
+                                            placeholder="Adres zwrotu / Numer listu...">${m.shippingDestination || ''}</textarea>
+                                    </div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-6 py-5 align-top text-right border-b-8 border-slate-100">
+                        <td class="px-6 py-5 align-top text-right w-16">
                              ${!archiveMode ? `
                                 <button onclick="State.toggleArchive('${m.id}')" class="text-slate-400 hover:text-amber-500 transition p-2 rounded-full hover:bg-amber-50" title="Przenieś do archiwum">
                                     <i class="fas fa-box-archive fa-lg"></i>
@@ -1326,12 +1330,12 @@ end $$;
                     </div>
                     
                     <div class="p-6 border-b border-slate-200 bg-white">
-                        <form onsubmit="event.preventDefault(); State.addUser(this.u.value, this.p.value, this.r.value); this.reset();" class="flex gap-4 items-end">
-                            <div class="flex-1">
+                        <form onsubmit="event.preventDefault(); State.addUser(this.u.value, this.p.value, this.r.value); this.reset();" class="flex flex-wrap gap-4 items-end">
+                            <div class="flex-1 min-w-[150px]">
                                 <label class="block text-xs font-bold text-slate-500 mb-1">LOGIN</label>
                                 <input type="text" name="u" class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:ring-brand-500 bg-slate-50" placeholder="Nowy login" required>
                             </div>
-                            <div class="flex-1">
+                            <div class="flex-1 min-w-[150px]">
                                 <label class="block text-xs font-bold text-slate-500 mb-1">HASŁO</label>
                                 <input type="text" name="p" class="w-full rounded-lg border-slate-300 text-sm p-2.5 focus:ring-brand-500 bg-slate-50" placeholder="Hasło" required>
                             </div>
@@ -1444,6 +1448,10 @@ end $$;
                     </div>
                 `;
                 App.renderContent();
+            },
+
+            openSmsModal: () => {
+                // Removed
             },
 
             getFilteredMovies: (archiveMode) => {
